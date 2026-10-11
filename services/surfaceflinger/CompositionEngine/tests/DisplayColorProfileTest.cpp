@@ -151,6 +151,18 @@ public:
                 .build();
     }
 
+    static impl::DisplayColorProfile createProfileWithSRGBVendorAndDisplayP3Support() {
+        return ProfileFactory()
+                .setHasWideColorGamut(true)
+                .addHdrType(Hdr::HLG)
+                .addColorModeRenderIntent(ColorMode::SRGB, RenderIntent::COLORIMETRIC)
+                .addColorModeRenderIntent(ColorMode::SRGB, RenderIntent::ENHANCE)
+                .addColorModeRenderIntent(ColorMode::SRGB, VendorRenderIntent)
+                .addColorModeRenderIntent(ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC)
+                .addColorModeRenderIntent(ColorMode::DISPLAY_P3, RenderIntent::ENHANCE)
+                .build();
+    }
+
 private:
     bool mHasWideColorGamut = false;
     std::vector<Hdr> mSupportedHdrTypes;
@@ -573,6 +585,40 @@ TEST_F(DisplayColorProfileTest, getBestColorModeReturnsExpectedModesWhenOutputHa
             /*  6 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},
             /*  7 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::ENHANCE},
             /*  8 */ Result{Dataspace::UNKNOWN, ColorMode::NATIVE, RenderIntent::COLORIMETRIC},
+
+            /*  9 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},
+            /* 10 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},
+            /* 11 */ Result{Dataspace::UNKNOWN, ColorMode::NATIVE, RenderIntent::COLORIMETRIC},
+
+            /* 12 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},
+            /* 13 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},
+            /* 14 */ Result{Dataspace::UNKNOWN, ColorMode::NATIVE, RenderIntent::COLORIMETRIC},
+            /* clang-format on */
+    };
+
+    checkGetBestColorMode(profile, expectedResults);
+}
+
+TEST_F(DisplayColorProfileTest,
+       getBestColorModeKeepsSRGBVendorIntentWhenOutputHasDisplayP3Support) {
+    auto profile = ProfileFactory::createProfileWithSRGBVendorAndDisplayP3Support();
+
+    // Note: This table of expected values goes with the table of arguments
+    // used in checkGetBestColorMode.
+    using Result = std::tuple<Dataspace, ColorMode, RenderIntent>;
+    std::array<Result, 15> expectedResults = {
+            /* clang-format off */
+            /*  0 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},
+            /*  1 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::ENHANCE},
+            /*  2 */ Result{Dataspace::V0_SRGB, ColorMode::SRGB, VendorRenderIntent},
+
+            /*  3 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},
+            /*  4 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::ENHANCE},
+            /*  5 */ Result{Dataspace::V0_SRGB, ColorMode::SRGB, VendorRenderIntent},
+
+            /*  6 */ Result{Dataspace::V0_SRGB, ColorMode::SRGB, RenderIntent::COLORIMETRIC},
+            /*  7 */ Result{Dataspace::V0_SRGB, ColorMode::SRGB, RenderIntent::ENHANCE},
+            /*  8 */ Result{Dataspace::V0_SRGB, ColorMode::SRGB, VendorRenderIntent},
 
             /*  9 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},
             /* 10 */ Result{Dataspace::DISPLAY_P3, ColorMode::DISPLAY_P3, RenderIntent::COLORIMETRIC},

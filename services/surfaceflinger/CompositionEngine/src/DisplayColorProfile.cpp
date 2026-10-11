@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <algorithm>
 #include <array>
 #include <unordered_set>
 
@@ -68,6 +69,14 @@ const std::array<RenderIntent, 2> sHdrRenderIntents = {
 bool isHdrColorMode(const ColorMode colorMode) {
     return std::any_of(std::begin(sHdrColorModes), std::end(sHdrColorModes),
                        [colorMode](ColorMode hdrColorMode) { return hdrColorMode == colorMode; });
+}
+
+// Returns true if the given intent is one of the known SDR or HDR render intents
+bool isKnownRenderIntent(const RenderIntent intent) {
+    return std::any_of(std::begin(sSdrRenderIntents), std::end(sSdrRenderIntents),
+                       [intent](RenderIntent sdrIntent) { return sdrIntent == intent; }) ||
+            std::any_of(std::begin(sHdrRenderIntents), std::end(sHdrRenderIntents),
+                        [intent](RenderIntent hdrIntent) { return hdrIntent == intent; });
 }
 
 // map known color mode to dataspace
@@ -301,13 +310,28 @@ void DisplayColorProfile::addColorMode(
         const DisplayColorProfileCreationArgs::HwcColorModes& hwcColorModes, const ColorMode mode,
         const RenderIntent intent) {
     // find the best color mode
-    const ColorMode hwcColorMode = getHwcColorMode(hwcColorModes, mode);
+    ColorMode hwcColorMode = getHwcColorMode(hwcColorModes, mode);
 
     // find the best render intent
     auto iter = hwcColorModes.find(hwcColorMode);
     const auto& hwcIntents =
             iter != hwcColorModes.end() ? iter->second : std::vector<RenderIntent>();
-    const RenderIntent hwcIntent = getHwcRenderIntent(hwcIntents, intent);
+    RenderIntent hwcIntent = getHwcRenderIntent(hwcIntents, intent);
+
+    // Vendor render intents are collected from the SRGB color mode and usually back a
+    // vendor display color setting. If the HWC does not expose the same intent for a
+    // wide color gamut SDR mode, falling back to a standard intent there would silently
+    // drop the user's color setting whenever wide color content is shown. Keep the
+    // vendor intent and compose in SRGB instead.
+    if (hwcIntent != intent && !isHdrColorMode(mode) && !isKnownRenderIntent(intent)) {
+        const auto srgbIter = hwcColorModes.find(ColorMode::SRGB);
+        if (srgbIter != hwcColorModes.end() &&
+            std::find(srgbIter->second.begin(), srgbIter->second.end(), intent) !=
+                    srgbIter->second.end()) {
+            hwcColorMode = ColorMode::SRGB;
+            hwcIntent = intent;
+        }
+    }
 
     const Dataspace dataspace = colorModeToDataspace(mode);
     const Dataspace hwcDataspace = colorModeToDataspace(hwcColorMode);
