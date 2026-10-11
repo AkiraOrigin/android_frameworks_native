@@ -61,6 +61,11 @@
 
 #include <com_android_graphics_libgui_flags.h>
 
+#ifndef NO_BINDER
+#include <cutils/properties.h>
+#include "QtiExtension/QtiSurfaceExtensionGPP.h"
+#endif // NO_BINDER
+
 namespace android {
 
 using namespace com::android::graphics::libgui;
@@ -191,9 +196,22 @@ Surface::Surface(const sp<IGraphicBufferProducer>& bufferProducer, bool controll
     } else {
         ALOGE("Failed to get surface config from BQ. Error: %d", status);
     }
+
+#ifndef NO_BINDER
+    if (property_get_bool("vendor.gpp.create_frc_extension", false)) {
+        sp<IBinder> handle = IGraphicBufferProducer::asBinder(bufferProducer);
+        mQtiSurfaceGPPExtn =
+                std::make_shared<libguiextension::QtiSurfaceExtensionGPP>(this, handle,
+                                                                          &mGraphicBufferProducer);
+    }
+#endif // NO_BINDER
 }
 
 Surface::~Surface() {
+#ifndef NO_BINDER
+    mQtiSurfaceGPPExtn = nullptr;
+#endif // NO_BINDER
+
     if (mConnectedToCpu) {
         Surface::disconnect(NATIVE_WINDOW_API_CPU);
     }
@@ -274,6 +292,11 @@ sp<IGraphicBufferProducer> Surface::getIGraphicBufferProducer() const {
 
 void Surface::setSidebandStream(const sp<NativeHandle>& stream) {
     mGraphicBufferProducer->setSidebandStream(stream);
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setSidebandStream(stream);
+    }
+#endif // NO_BINDER
 }
 
 void Surface::allocateBuffers() {
@@ -756,6 +779,12 @@ int Surface::dequeueBuffer(sp<GraphicBuffer>* buffer, int* fenceFd) {
     }
     SURF_LOGV("Surface::dequeueBuffer");
 
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->DynamicEnable(&mGraphicBufferProducer);
+    }
+#endif // NO_BINDER
+
     IGraphicBufferProducer::DequeueBufferInput dqInput;
     {
         Mutex::Autolock lock(mMutex);
@@ -927,6 +956,12 @@ int Surface::dequeueBuffers(std::vector<BatchBuffer>* buffers) {
 
     ATRACE_CALL();
     SURF_LOGV("Surface::dequeueBuffers");
+
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->DynamicEnable(&mGraphicBufferProducer);
+    }
+#endif // NO_BINDER
 
     if (buffers->size() == 0) {
         SURF_LOGE("%s: must dequeue at least 1 buffer!", __FUNCTION__);
@@ -1428,6 +1463,11 @@ void Surface::applyGrallocMetadataLocked(
 void Surface::onBufferQueuedLocked(int slot, const sp<Fence>& fence,
                                    const IGraphicBufferProducer::QueueBufferOutput& output) {
     mDequeuedSlots.erase(slot);
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setQueuedBufferSlot(slot);
+    }
+#endif // NO_BINDER
     if (mSlots[slot].requiresFreeOnReturn) {
         mSlots[slot].buffer = nullptr;
         mSlots[slot].requiresFreeOnReturn = false;
@@ -1702,6 +1742,11 @@ int Surface::query(int what, int* value) const {
             }
         }
     }
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn && mQtiSurfaceGPPExtn->IsGPPEnabled()) {
+        return mQtiSurfaceGPPExtn->query(what, value);
+    }
+#endif // NO_BINDER
     return mGraphicBufferProducer->query(what, value);
 }
 
@@ -2343,6 +2388,12 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
     IGraphicBufferProducer::QueueBufferOutput output;
     mReportRemovedBuffers = reportBufferRemoval;
 
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->Connect(api, &mGraphicBufferProducer);
+    }
+#endif // NO_BINDER
+
     if (listener != nullptr) {
         mListenerProxy = sp<ProducerListenerProxy>::make(wp<Surface>::fromExisting(this), listener,
                                                          needsAcquiredNotify, needsDroppedNotify);
@@ -2365,6 +2416,12 @@ int Surface::connect(int api, const sp<SurfaceListener>& listener, bool reportBu
         }
 
         mConsumerRunningBehind = (output.numPendingBuffers >= 2);
+
+#ifndef NO_BINDER
+        if (mQtiSurfaceGPPExtn) {
+            mQtiSurfaceGPPExtn->StoreConnect(api, mListenerProxy, mProducerControlledByApp);
+        }
+#endif // NO_BINDER
 
 #if !defined(NO_BINDER)
         if (listener && listener->needsDeathNotify()) {
@@ -2447,6 +2504,12 @@ int Surface::disconnect(int api, IGraphicBufferProducer::DisconnectMode mode) {
         mSurfaceDeathListener = nullptr;
     }
 #endif // !defined(NO_BINDER)
+
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->Disconnect(api, &mGraphicBufferProducer);
+    }
+#endif // NO_BINDER
 
     return err;
 }
@@ -2603,6 +2666,11 @@ int Surface::setBufferCount(int bufferCount)
     ATRACE_CALL();
     SURF_LOGV("Surface::setBufferCount");
     Mutex::Autolock lock(mMutex);
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setBufferCount(bufferCount);
+    }
+#endif // NO_BINDER
 
     status_t err = NO_ERROR;
     if (bufferCount == 0) {
@@ -3204,6 +3272,11 @@ int Surface::setAutoPrerotation(bool autoPrerotation) {
     status_t err = mGraphicBufferProducer->setAutoPrerotation(autoPrerotation);
     if (err == NO_ERROR) {
         mAutoPrerotation = autoPrerotation;
+#ifndef NO_BINDER
+        if (mQtiSurfaceGPPExtn) {
+            mQtiSurfaceGPPExtn->setAutoPrerotation(autoPrerotation);
+        }
+#endif // NO_BINDER
     }
     SURF_LOGE_IF(err, "IGraphicBufferProducer::setAutoPrerotation(%d) returned %s", autoPrerotation,
                  strerror(-err));
@@ -3234,6 +3307,11 @@ status_t Surface::setFrameRate(float frameRate, int8_t compatibility,
                                                         changeFrameRateStrategy);
     SURF_LOGE_IF(err, "IGraphicBufferProducer::setFrameRate(%.2f) returned %s", frameRate,
                  strerror(-err));
+#ifndef NO_BINDER
+    if (mQtiSurfaceGPPExtn) {
+        mQtiSurfaceGPPExtn->setFrameRate(frameRate, compatibility, changeFrameRateStrategy);
+    }
+#endif // NO_BINDER
     return err;
 }
 

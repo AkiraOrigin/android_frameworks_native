@@ -31,6 +31,7 @@
 #include <utils/RefBase.h>
 #include <utils/String8.h>
 
+#include <memory>
 #include <optional>
 #include <shared_mutex>
 #include <unordered_set>
@@ -57,6 +58,10 @@ class ISurfaceComposer;
 } // namespace gui
 
 class ISurfaceComposer;
+
+namespace libguiextension {
+class QtiSurfaceExtensionGPP;
+} // namespace libguiextension
 
 using gui::FrameTimelineInfo;
 
@@ -897,6 +902,11 @@ protected:
     bool mIsSlotExpansionAllowed;
 
     sp<ProducerListenerProxy> mListenerProxy;
+
+    // QTI Game Post Processing (G-FRC). It reroutes mGraphicBufferProducer
+    // through gppservice and moves buffers between mSlots when toggled.
+    friend class libguiextension::QtiSurfaceExtensionGPP;
+    std::shared_ptr<libguiextension::QtiSurfaceExtensionGPP> mQtiSurfaceGPPExtn;
 
     // Get and flush the buffers of given slots, if the buffer in the slot
     // is currently dequeued then it won't be flushed and won't be returned
