@@ -9,6 +9,7 @@
 #include <cutils/misc.h>
 #include <cutils/properties.h>
 #include "QtiSurfaceExtensionGPP.h"
+#include "GppLegacyProducer.h"
 #include <gui/Surface.h>
 #include <private/android_filesystem_config.h>
 #include <unordered_map>
@@ -225,7 +226,14 @@ bool QtiSurfaceExtensionGPP::DynamicEnableInternal(sp<IGraphicBufferProducer>* g
         if (enable !=-1 && mIsEnable != enable) {
             if (enable) {
                 ALOGV("Enabling GPP feather");
-                status_t err = reinterpret_cast<InitFunc_t>(mFuncInit)(gbp, mHandle);
+                // gppservice gets the output producer through an adapter that speaks the
+                // older libgui protocol it is built against, and Init() replaces it with
+                // the producer of the GPP session on success.
+                sp<IGraphicBufferProducer> sessionGbp = sp<GppLegacyProducer>::make(*gbp);
+                status_t err = reinterpret_cast<InitFunc_t>(mFuncInit)(&sessionGbp, mHandle);
+                if (err == OK) {
+                    *gbp = sessionGbp;
+                }
                 if (err == OK) {
                     mIsEnable = true;
                     mIsSupported = true;

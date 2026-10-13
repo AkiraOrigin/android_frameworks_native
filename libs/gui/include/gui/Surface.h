@@ -907,6 +907,7 @@ protected:
     // through gppservice and moves buffers between mSlots when toggled.
     friend class libguiextension::QtiSurfaceExtensionGPP;
     std::shared_ptr<libguiextension::QtiSurfaceExtensionGPP> mQtiSurfaceGPPExtn;
+    sp<IGraphicBufferProducer> getProducerForNewCalls() const;
 
     // Get and flush the buffers of given slots, if the buffer in the slot
     // is currently dequeued then it won't be flushed and won't be returned

@@ -27,6 +27,9 @@ public:
     void StoreConnect(int api, const sp<IProducerListener>& listener, bool producerControlledByApp);
     inline bool IsGPPEnabled() const { return mIsEnable; }
     inline bool IsGPPSupported() const { return mIsSupported && mConnectedToGpu; }
+    // The queue gppservice renders into. IGraphicBufferProducer calls that gppservice's
+    // older libgui doesn't implement go there while GPP is enabled.
+    sp<IGraphicBufferProducer> getOutputProducer() const { return mOriginalGbp; }
     int getUid() const { return mUID; }
     int query(int what, int* outValue) const;
     void setBufferCount(int bufferCount) { mClientSetBufferCount = bufferCount; }

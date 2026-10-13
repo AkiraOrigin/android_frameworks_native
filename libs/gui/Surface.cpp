@@ -3321,15 +3321,34 @@ status_t Surface::setFrameTimelineInfo(uint64_t /*frameNumber*/,
     return BAD_VALUE;
 }
 
+#ifndef NO_BINDER
+// gppservice's IGraphicBufferProducer predates these calls, so while GPP is enabled send them
+// to the queue it renders into.
+sp<IGraphicBufferProducer> Surface::getProducerForNewCalls() const {
+    if (mQtiSurfaceGPPExtn && mQtiSurfaceGPPExtn->IsGPPEnabled()) {
+        return mQtiSurfaceGPPExtn->getOutputProducer();
+    }
+    return mGraphicBufferProducer;
+}
+#endif // NO_BINDER
+
 status_t Surface::setProducerThrottlingEnabled(bool enabled) {
+#ifndef NO_BINDER
+    status_t err = getProducerForNewCalls()->setProducerThrottlingEnabled(enabled);
+#else
     status_t err = mGraphicBufferProducer->setProducerThrottlingEnabled(enabled);
+#endif // NO_BINDER
     SURF_LOGE_IF(err, "IGraphicBufferProducer::setProducerThrottlingEnabled(%s) returned %s",
                  enabled ? "true" : "false", strerror(-err));
     return err;
 }
 
 status_t Surface::isProducerThrottlingEnabled(bool* outEnabled) const {
+#ifndef NO_BINDER
+    status_t err = getProducerForNewCalls()->isProducerThrottlingEnabled(outEnabled);
+#else
     status_t err = mGraphicBufferProducer->isProducerThrottlingEnabled(outEnabled);
+#endif // NO_BINDER
     return err;
 }
 
@@ -3345,7 +3364,11 @@ status_t Surface::setAdditionalOptions(const std::vector<gui::AdditionalOptions>
 #endif
 
 status_t Surface::setPresentMode(int32_t mode) {
+#ifndef NO_BINDER
+    return getProducerForNewCalls()->setPresentMode(mode);
+#else
     return mGraphicBufferProducer->setPresentMode(mode);
+#endif // NO_BINDER
 }
 
 sp<IBinder> Surface::getSurfaceControlHandle() const {
