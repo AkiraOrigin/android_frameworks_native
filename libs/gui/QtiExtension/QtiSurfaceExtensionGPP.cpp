@@ -82,12 +82,12 @@ QtiSurfaceExtensionGPP::QtiSurfaceExtensionGPP(
 
     status_t status = binder->transact(
         static_cast<uint32_t>(TAG::GPP_SERV_QUERY_SUPPORTED_GAME), data, &reply);
-    if (status != NO_ERROR) {
-        mIsSupported = false;
-        return;
-    }
-    status_t result = reply.readInt32();
-    if (result != NO_ERROR) {
+    if (status == UNKNOWN_TRANSACTION) {
+        // Older gppservice (e.g. the one shipped on SM8650 OPLUS devices) has no game query,
+        // it only accepts create/destroy and rejects unsupported apps when the session is
+        // created, so let Init() decide like the stock libgui does.
+        ALOGV("gppservice has no game query, deferring support check to session creation");
+    } else if (status != NO_ERROR || reply.readInt32() != NO_ERROR) {
         mIsSupported = false;
         return;
     }
