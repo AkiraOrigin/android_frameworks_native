@@ -12,6 +12,8 @@
 #include <gui/Surface.h>
 #include <private/android_filesystem_config.h>
 #include <unordered_map>
+#include <android-base/file.h>
+#include <android-base/strings.h>
 #include <binder/IServiceManager.h>
 
 using ::android::IGraphicBufferProducer;
@@ -33,6 +35,47 @@ enum class TAG : uint32_t {
 #define GPP_INIT_RETRY_MAX_ATTEMPTS 5
 
 namespace android::libguiextension {
+
+namespace {
+
+constexpr char kGPPAppList[] = "/system/etc/gpp_app_list";
+
+struct GppApp {
+    std::string name;
+    bool listed = false;
+};
+
+// Whether this process is one of the games gppservice supports, read from the same list it
+// uses. Only needed when gppservice can't answer GPP_SERV_QUERY_SUPPORTED_GAME itself.
+const GppApp& GetGppApp() {
+    static const GppApp app = [] {
+        GppApp result;
+        std::string cmdline;
+        if (!base::ReadFileToString("/proc/self/cmdline", &cmdline)) {
+            return result;
+        }
+        result.name = cmdline.c_str();
+        result.name = result.name.substr(0, result.name.find(':'));
+
+        std::string list;
+        if (!base::ReadFileToString(kGPPAppList, &list)) {
+            ALOGE("Failed to read %s", kGPPAppList);
+            return result;
+        }
+        for (const auto& line : base::Split(list, "\n")) {
+            std::string entry = base::Trim(line);
+            if (!entry.empty() && entry[0] != '#' && entry == result.name) {
+                result.listed = true;
+                break;
+            }
+        }
+        return result;
+    }();
+    return app;
+}
+
+} // namespace
+
 QtiSurfaceExtensionGPP::QtiSurfaceExtensionGPP(
         Surface* surface,
         const sp<IBinder> handle,
@@ -83,10 +126,16 @@ QtiSurfaceExtensionGPP::QtiSurfaceExtensionGPP(
     status_t status = binder->transact(
         static_cast<uint32_t>(TAG::GPP_SERV_QUERY_SUPPORTED_GAME), data, &reply);
     if (status == UNKNOWN_TRANSACTION) {
-        // Older gppservice (e.g. the one shipped on SM8650 OPLUS devices) has no game query,
-        // it only accepts create/destroy and rejects unsupported apps when the session is
-        // created, so let Init() decide like the stock libgui does.
-        ALOGV("gppservice has no game query, deferring support check to session creation");
+        // Older gppservice (e.g. the one shipped on SM8650 OPLUS devices) has no game query
+        // and only accepts create/destroy, so check the app against its game list here.
+        // vendor.gpp.frc.enable is global, without this every app would try to start GPP.
+        const GppApp& app = GetGppApp();
+        if (!app.listed) {
+            ALOGV("%s is not in %s", app.name.c_str(), kGPPAppList);
+            mIsSupported = false;
+            return;
+        }
+        ALOGI("%s is in %s", app.name.c_str(), kGPPAppList);
     } else if (status != NO_ERROR || reply.readInt32() != NO_ERROR) {
         mIsSupported = false;
         return;
