@@ -187,8 +187,9 @@ bool QtiSurfaceExtensionGPP::DynamicEnable(sp<IGraphicBufferProducer>* gbp) {
 
 void QtiSurfaceExtensionGPP::DisableGPPinternal(sp<IGraphicBufferProducer>* gbp) {
     if (mIsEnable && mFuncDeinit) {
-        reinterpret_cast<DeinitFunc_t>(mFuncDeinit)(mHandle);
+        reinterpret_cast<DeinitFunc_t>(mFuncDeinit)(mSessionHandle);
     }
+    mSessionHandle = nullptr;
     mGbp = nullptr;
     if (mOriginalGbp != nullptr) {
         if (static_cast<uint32_t>(mFrameRate) != 0) {
@@ -230,9 +231,16 @@ bool QtiSurfaceExtensionGPP::DynamicEnableInternal(sp<IGraphicBufferProducer>* g
                 // older libgui protocol it is built against, and Init() replaces it with
                 // the producer of the GPP session on success.
                 sp<IGraphicBufferProducer> sessionGbp = sp<GppLegacyProducer>::make(*gbp);
-                status_t err = reinterpret_cast<InitFunc_t>(mFuncInit)(&sessionGbp, mHandle);
+                // gppservice watches the output producer for the death of the app, but only
+                // keeps the session token alive, so use the same binder for both. Otherwise
+                // the death link is dropped right away and the session of a crashed app
+                // blocks every later one.
+                sp<IBinder> sessionHandle = IInterface::asBinder(sessionGbp);
+                status_t err =
+                        reinterpret_cast<InitFunc_t>(mFuncInit)(&sessionGbp, sessionHandle);
                 if (err == OK) {
-                    *gbp = sessionGbp;
+                    mSessionHandle = sessionHandle;
+                    *gbp = sp<GppLegacySessionProducer>::make(sessionGbp);
                 }
                 if (err == OK) {
                     mIsEnable = true;
@@ -345,7 +353,7 @@ int QtiSurfaceExtensionGPP::query(int what, int *outValue) const {
 
 QtiSurfaceExtensionGPP::~QtiSurfaceExtensionGPP() {
     if (mIsEnable && mFuncDeinit) {
-        reinterpret_cast<DeinitFunc_t>(mFuncDeinit)(mHandle);
+        reinterpret_cast<DeinitFunc_t>(mFuncDeinit)(mSessionHandle);
     }
     if (mLibHandler != nullptr) {
         dlclose(mLibHandler);

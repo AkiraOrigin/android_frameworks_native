@@ -63,6 +63,8 @@ private:
     sp<IGraphicBufferProducer> mOriginalGbp;
     sp<IGraphicBufferProducer> mGbp;
     sp<IBinder> mHandle;
+    // Token of the current GPP session, see DynamicEnableInternal().
+    sp<IBinder> mSessionHandle;
     void* mLibHandler;
     void* mFuncInit;
     void* mFuncDeinit;
