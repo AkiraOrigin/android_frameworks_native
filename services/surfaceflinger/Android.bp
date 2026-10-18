@@ -124,6 +124,9 @@ cc_defaults {
     ] + select(soong_config_variable("qtidisplay", "headers_namespace"), {
         any @ flag_val: ["-DQCOM_UM_FAMILY"],
         default: [],
+    }) + select(soong_config_variable("surfaceflinger", "panel_refresh_rate_node"), {
+        any @ node: ["-DPANEL_REFRESH_RATE_NODE=\"" + node + "\""],
+        default: [],
     }),
     shared_libs: [
         "android.hardware.common-V2-ndk",

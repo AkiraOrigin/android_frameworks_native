@@ -296,8 +296,14 @@ void RefreshRateOverlay::setLayerStack(ui::LayerStack stack) {
 }
 
 void RefreshRateOverlay::startPanelRefreshPoller() {
+#ifdef PANEL_REFRESH_RATE_NODE
+    // Set at build time through the surfaceflinger:panel_refresh_rate_node soong
+    // config variable, so devices do not need a platform property context for it.
+    const std::string nodePath = PANEL_REFRESH_RATE_NODE;
+#else
     const std::string nodePath =
             base::GetProperty("ro.surface_flinger.panel_refresh_rate_node", "");
+#endif
     if (nodePath.empty()) return;
 
     mPanelPollThread = std::thread([this, nodePath] { panelRefreshPollLoop(nodePath); });
